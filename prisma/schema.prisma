@@ -1,0 +1,112 @@
+// BrowserPilot — Prisma Schema
+// Database: SQLite (MVP)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  password  String
+  createdAt DateTime @default(now())
+}
+
+model Task {
+  id           String    @id @default(cuid())
+  description  String
+  startingUrl  String?
+  outputFormat String    @default("TABLE")      // TABLE | JSON | SUMMARY
+  mode         String    @default("AUTONOMOUS") // GUIDED | AUTONOMOUS
+  status       String    @default("PENDING")    // PENDING | RUNNING | COMPLETED | FAILED | CANCELLED
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  runs         TaskRun[]
+}
+
+model TaskRun {
+  id             String          @id @default(cuid())
+  taskId         String
+  task           Task            @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  status         String          @default("PENDING") // PENDING | RUNNING | COMPLETED | FAILED | CANCELLED
+  startedAt      DateTime?
+  completedAt    DateTime?
+  errorMessage   String?
+  createdAt      DateTime        @default(now())
+  events         ExecutionEvent[]
+  toolCalls      ToolCall[]
+  screenshots    Screenshot[]
+  result         Result?
+  browserSession BrowserSession?
+
+  @@index([taskId])
+  @@index([status])
+}
+
+model BrowserSession {
+  id         String    @id @default(cuid())
+  taskRunId  String    @unique
+  taskRun    TaskRun   @relation(fields: [taskRunId], references: [id], onDelete: Cascade)
+  status     String    @default("ACTIVE") // ACTIVE | CLOSED | ERROR
+  startedAt  DateTime  @default(now())
+  closedAt   DateTime?
+  currentUrl String?
+}
+
+model ExecutionEvent {
+  id        String   @id @default(cuid())
+  taskRunId String
+  taskRun   TaskRun  @relation(fields: [taskRunId], references: [id], onDelete: Cascade)
+  type      String   // BROWSER_LAUNCHED | NAVIGATING | PAGE_LOADED | SEARCHING | CLICKING | EXTRACTING | SCREENSHOT | PROCESSING | COMPLETED | FAILED
+  message   String
+  status    String   @default("COMPLETED") // PENDING | RUNNING | COMPLETED | FAILED
+  url       String?
+  duration  Int?     // milliseconds
+  timestamp DateTime @default(now())
+
+  @@index([taskRunId])
+  @@index([timestamp])
+}
+
+model ToolCall {
+  id        String   @id @default(cuid())
+  taskRunId String
+  taskRun   TaskRun  @relation(fields: [taskRunId], references: [id], onDelete: Cascade)
+  tool      String   // browser.goto | browser.click | browser.fill | browser.extract | browser.screenshot
+  input     String   // JSON string
+  result    String?  // JSON string
+  status    String   @default("PENDING") // PENDING | RUNNING | COMPLETED | FAILED
+  duration  Int?     // milliseconds
+  timestamp DateTime @default(now())
+
+  @@index([taskRunId])
+}
+
+model Screenshot {
+  id        String   @id @default(cuid())
+  taskRunId String
+  taskRun   TaskRun  @relation(fields: [taskRunId], references: [id], onDelete: Cascade)
+  url       String?
+  action    String?
+  filePath  String   // relative: screenshots/[taskRunId]/[file].png
+  timestamp DateTime @default(now())
+
+  @@index([taskRunId])
+}
+
+model Result {
+  id             String   @id @default(cuid())
+  taskRunId      String   @unique
+  taskRun        TaskRun  @relation(fields: [taskRunId], references: [id], onDelete: Cascade)
+  summary        String?
+  structuredData String?  // JSON string
+  sources        String?  // JSON array of URLs
+  format         String   @default("TABLE") // TABLE | JSON | SUMMARY
+  createdAt      DateTime @default(now())
+}
